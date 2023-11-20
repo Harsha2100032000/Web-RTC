@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Chat</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 110vh;
+      margin: 0;
+      background-color: #f0f0f0; 
+      /* Set your desired background color */
+      background-image: url('aud.jpg');
+      background-repeat: no-repeat;
+      background-size: 100%  100%;
+      
+    }
+
+    #voiceToggle {
+      background-color: #d7dadb; /* Set your desired button background color */
+      color: rgb(12, 13, 14); /* Set your desired button text color */
+      border: none;
+      border-radius: 100%;
+      padding: 50px; /* Adjust the padding for size */
+      font-size: 36px; /* Adjust the font size for size */
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    #voiceToggle:hover {
+      background-color: #2980b9; /* Set your desired button background color on hover */
+    }
+  </style>
+</head>
+<body>
+  <button id="voiceToggle" class="start">
+    <i class="fas fa-microphone"></i>
+  </button>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const voiceToggle = document.getElementById('voiceToggle');
+      let isVoiceOn = false;
+
+      let mediaStream;
+      let audioContext;
+      let mediaStreamSource;
+      let scriptNode;
+
+      // Move WebSocket initialization outside the click event listener
+      const websocket = new WebSocket('ws://10.56.1.45:8000');
+
+      voiceToggle.addEventListener('click', async () => {
+        if (!isVoiceOn) {
+          // Start voice
+          try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            mediaStreamSource = audioContext.createMediaStreamSource(mediaStream);
+
+            mediaStreamSource.connect(audioContext.destination);
+
+            // Send audio data to the server
+            scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
+            scriptNode.onaudioprocess = (event) => {
+              const inputData = event.inputBuffer.getChannelData(0);
+              websocket.send(inputData.buffer);
+            };
+
+            mediaStreamSource.connect(scriptNode);
+            scriptNode.connect(audioContext.destination);
+
+            websocket.onmessage = (event) => {
+              // Receive and play audio data from other clients
+              const arrayBuffer = event.data;
+              const audioBuffer = audioContext.createBuffer(1, arrayBuffer.byteLength / 4, audioContext.sampleRate);
+              const audioData = new Float32Array(audioBuffer.getChannelData(0));
+              audioData.set(new Float32Array(arrayBuffer));
+
+              const source = audioContext.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(audioContext.destination);
+              source.start();
+            };
+
+            voiceToggle.innerHTML = '<i class="fas fa-stop"></i>';
+            isVoiceOn = true;
+          } catch (error) {
+            console.error('Error accessing microphone:', error);
+          }
+        } else {
+          // Stop voice
+          // Stop the microphone and disconnect the audio processing
+          if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+          }
+
+          if (audioContext) {
+            audioContext.close();
+          }
+
+          if (scriptNode) {
+            scriptNode.disconnect();
+          }
+
+          // Close the WebSocket connection
+          if (websocket.readyState === WebSocket.OPEN) {
+            websocket.close();
+          }
+
+          voiceToggle.innerHTML = '<i class="fas fa-microphone"></i>';
+          isVoiceOn = false;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
