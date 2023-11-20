@@ -35,6 +35,6 @@ app.use((req, res, next) => {
   next();
 });
 
-server.listen(8000, () => {
+server.listen(8000, '0.0.0.0', () => {
   console.log('Server listening on http://10.56.1.45:8000');
 });
